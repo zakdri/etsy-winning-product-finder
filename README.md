@@ -24,10 +24,10 @@ pip install -r ml/requirements.txt
 
 ## Collect the first real snapshot
 
-This collector uses Etsy's official public active-listings endpoint, stores derived fields in SQLite, respects pagination limits, paces requests, records quota headers, and retries `429`/temporary server responses.
+Start with one page of up to 100 listings:
 
 ```bat
-python ml/src/collect_snapshots.py --keyword "vintage horse wall art" --pages 3 --page-size 100 --enrich-shops --max-shop-lookups 150
+python ml/src/collect_snapshots.py --keyword "vintage horse wall art" --pages 1 --page-size 100 --enrich-shops --max-shop-lookups 100
 ```
 
 The database is created at:
@@ -36,15 +36,32 @@ The database is created at:
 ml/data/raw/etsy_snapshots.sqlite3
 ```
 
-Run the same command for several niches. Keep each keyword consistent so the same listings can be observed again.
+### Marketplace pagination restriction
+
+Etsy documents `limit` and `offset` pagination, but the live API can apply a stricter offset limit to marketplace requests it classifies as anonymous. When this happens, the collector now:
+
+- keeps and saves the first successful page;
+- completes the run instead of crashing;
+- returns `pagination_limited: true`;
+- returns `stop_reason: "anonymous_offset_limit"`.
+
+An optional `ETSY_ACCESS_TOKEN` is supported after a valid OAuth flow, but OAuth does not guarantee broader marketplace access because Etsy can also restrict access by the application's Access Level.
+
+To build a larger dataset without unsupported scraping, collect the first page for many focused keywords, categories, and scheduled dates:
+
+```bat
+python ml/src/collect_snapshots.py --keyword "printable wall art" --pages 1 --page-size 100
+python ml/src/collect_snapshots.py --keyword "nursery wall art" --pages 1 --page-size 100
+python ml/src/collect_snapshots.py --keyword "vintage landscape print" --pages 1 --page-size 100
+python ml/src/collect_snapshots.py --keyword "horse racing wall art" --pages 1 --page-size 100
+python ml/src/collect_snapshots.py --keyword "personalized wedding gift" --pages 1 --page-size 100
+```
+
+Keep keywords consistent so the same listings can be observed again.
 
 ## Collect the follow-up snapshot
 
 Run the same collection commands again around 14 days later. A single collection cannot produce a valid future-performance label.
-
-```bat
-python ml/src/collect_snapshots.py --keyword "vintage horse wall art" --pages 3 --page-size 100 --enrich-shops --max-shop-lookups 150
-```
 
 For stronger data, collect daily or every 2–3 days for at least 60–90 days.
 
