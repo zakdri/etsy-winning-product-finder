@@ -1,0 +1,1 @@
+"""TrendScout FastAPI application."""

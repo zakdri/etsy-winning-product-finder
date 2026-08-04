@@ -2,9 +2,16 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 ml/data/raw/*
 ml/data/processed/*
 ml/models/*
 !ml/data/raw/.gitkeep
 !ml/data/processed/.gitkeep
 !ml/models/.gitkeep
+extension/node_modules/
+extension/.output/
+extension/.wxt/
+extension/*.zip
+safari/
+.DS_Store

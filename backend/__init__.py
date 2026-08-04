@@ -1,0 +1,1 @@
+"""TrendScout backend package."""
