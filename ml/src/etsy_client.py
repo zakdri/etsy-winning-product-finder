@@ -20,6 +20,7 @@ class EtsyAPIError(RuntimeError):
 class EtsyClient:
     api_key: str
     shared_secret: str
+    access_token: str | None = None
     base_url: str = DEFAULT_BASE_URL
     timeout_seconds: float = 30.0
     max_retries: int = 5
@@ -27,23 +28,29 @@ class EtsyClient:
 
     def __post_init__(self) -> None:
         self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "x-api-key": f"{self.api_key}:{self.shared_secret}",
-                "Accept": "application/json",
-                "User-Agent": os.getenv(
-                    "ETSY_USER_AGENT", "seller-trend-product-research/0.1"
-                ),
-            }
-        )
+        headers = {
+            "x-api-key": f"{self.api_key}:{self.shared_secret}",
+            "Accept": "application/json",
+            "User-Agent": os.getenv(
+                "ETSY_USER_AGENT", "seller-trend-product-research/0.1"
+            ),
+        }
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        self.session.headers.update(headers)
         self._last_request_at = 0.0
         self.last_rate_limits: dict[str, str] = {}
+
+    @property
+    def auth_mode(self) -> str:
+        return "oauth" if self.access_token else "api_key"
 
     @classmethod
     def from_env(cls) -> "EtsyClient":
         load_dotenv()
         api_key = os.getenv("ETSY_API_KEY", "").strip()
         shared_secret = os.getenv("ETSY_SHARED_SECRET", "").strip()
+        access_token = os.getenv("ETSY_ACCESS_TOKEN", "").strip() or None
         if not api_key or not shared_secret:
             raise RuntimeError(
                 "Missing ETSY_API_KEY or ETSY_SHARED_SECRET. "
@@ -52,6 +59,7 @@ class EtsyClient:
         return cls(
             api_key=api_key,
             shared_secret=shared_secret,
+            access_token=access_token,
             base_url=os.getenv("ETSY_API_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
             timeout_seconds=float(os.getenv("ETSY_TIMEOUT_SECONDS", "30")),
         )
