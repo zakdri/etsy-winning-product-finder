@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+ml/data/raw/*
+ml/data/processed/*
+ml/models/*
+!ml/data/raw/.gitkeep
+!ml/data/processed/.gitkeep
+!ml/models/.gitkeep
