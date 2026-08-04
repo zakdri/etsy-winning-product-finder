@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from etsy_client import EtsyClient
+from etsy_client import EtsyAPIError, EtsyClient
 from snapshot_store import SnapshotStore
+
+ANONYMOUS_OFFSET_ERROR = "offset exceeds the maximum allowed for anonymous requests"
 
 
 def utc_now() -> datetime:
@@ -144,7 +146,9 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     run_id = str(uuid.uuid4())
     started_at = utc_now()
     collected_count = 0
+    pages_collected = 0
     unique_shop_ids: set[int] = set()
+    stop_reason: str | None = None
 
     with SnapshotStore(args.db) as store:
         store.start_run(
@@ -162,19 +166,29 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
             for page_index in range(args.pages):
                 offset = page_index * args.page_size
                 if offset > 12000:
+                    stop_reason = "documented_offset_limit"
                     break
 
-                payload = client.find_active_listings(
-                    keywords=args.keyword,
-                    limit=args.page_size,
-                    offset=offset,
-                    sort_on=args.sort_on,
-                    sort_order=args.sort_order,
-                )
+                try:
+                    payload = client.find_active_listings(
+                        keywords=args.keyword,
+                        limit=args.page_size,
+                        offset=offset,
+                        sort_on=args.sort_on,
+                        sort_order=args.sort_order,
+                    )
+                except EtsyAPIError as exc:
+                    if page_index > 0 and ANONYMOUS_OFFSET_ERROR in str(exc).lower():
+                        stop_reason = "anonymous_offset_limit"
+                        break
+                    raise
+
                 results = payload.get("results") or []
                 if not isinstance(results, list) or not results:
+                    stop_reason = "no_more_results"
                     break
 
+                pages_collected += 1
                 snapshot_at = utc_now()
                 normalized = []
                 for item_index, listing in enumerate(results):
@@ -194,6 +208,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
                 collected_count += store.insert_listings(normalized)
                 total_count = optional_int(payload.get("count"))
                 if total_count is not None and offset + len(results) >= total_count:
+                    stop_reason = "end_of_results"
                     break
 
             enriched_shops = 0
@@ -218,8 +233,13 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
             return {
                 "run_id": run_id,
                 "keyword": args.keyword,
+                "auth_mode": client.auth_mode,
+                "requested_pages": args.pages,
+                "pages_collected": pages_collected,
                 "listings_collected": collected_count,
                 "shops_enriched": enriched_shops,
+                "pagination_limited": stop_reason == "anonymous_offset_limit",
+                "stop_reason": stop_reason,
                 "database": str(args.db),
                 "rate_limits": client.last_rate_limits,
             }
@@ -240,7 +260,7 @@ def main() -> None:
         description="Collect derived snapshots from Etsy's official Open API."
     )
     parser.add_argument("--keyword", required=True)
-    parser.add_argument("--pages", type=int, default=3)
+    parser.add_argument("--pages", type=int, default=1)
     parser.add_argument("--page-size", type=int, default=100)
     parser.add_argument(
         "--db",
