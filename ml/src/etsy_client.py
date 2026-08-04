@@ -140,21 +140,22 @@ class EtsyClient:
         offset: int = 0,
         sort_on: str = "created",
         sort_order: str = "desc",
+        include_images: bool = False,
     ) -> dict[str, Any]:
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         if not 0 <= offset <= 12000:
             raise ValueError("offset must be between 0 and 12000")
-        return self._request(
-            "listings/active",
-            params={
-                "keywords": keywords,
-                "limit": limit,
-                "offset": offset,
-                "sort_on": sort_on,
-                "sort_order": sort_order,
-            },
-        )
+        params: dict[str, Any] = {
+            "keywords": keywords,
+            "limit": limit,
+            "offset": offset,
+            "sort_on": sort_on,
+            "sort_order": sort_order,
+        }
+        if include_images:
+            params["includes"] = "Images"
+        return self._request("listings/active", params=params)
 
     def get_shop(self, shop_id: int) -> dict[str, Any]:
         if shop_id < 1:
